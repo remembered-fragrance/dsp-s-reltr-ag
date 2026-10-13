@@ -1,9 +1,10 @@
 name: ci-cd
 
 # CI: mọi push và pull request chạy kiểm thử CPU (không cần dữ liệu AG hay GPU).
-# CD: push lên main mà CI qua -> đóng gói demo và đồng bộ sang Hugging Face Space PRIVATE.
-#   Cần: secret HF_TOKEN (quyền ghi Space), biến HF_SPACE_ID (vd org/dsp-s-demo), HF_MODEL_REPO (vd org/dsp-s-reltr-a1).
-#   Chưa đặt HF_SPACE_ID thì bước deploy được bỏ qua.
+# CD (push lên main mà CI qua), mỗi đích chỉ chạy khi đã cấu hình:
+#   deploy-cloudrun: web demo trên Google Cloud Run. Cần biến GCP_PROJECT_ID, GCP_REGION, GCP_WIF_PROVIDER,
+#                    GCP_SA_EMAIL, GCP_RUN_SA (deploy/cloudrun/setup_gcp.ps1 tự đặt).
+#   deploy (HF):     Hugging Face Space (trả phí). Cần biến HF_SPACE_ID, HF_MODEL_REPO và secret HF_TOKEN.
 on:
   push:
     branches: [main]
@@ -35,17 +36,103 @@ jobs:
       - name: Dựng RelTR (upstream fca7397 + patches/reltr_dsp.patch)
         run: python tools/setup_reltr.py
       - name: Kiểm tra cú pháp
-        run: python -m compileall -q tools tests demo space
+        run: python -m compileall -q tools tests demo space deploy
       - name: Lưu và resume checkpoint (P11)
         run: python tests/test_resume_cpu.py
       - name: Model, đóng gói dự đoán, bộ chấm điểm (FR-5, FR-6, P12)
         run: python tests/test_model_cpu.py
       - name: Đẩy trạng thái bằng Kaggle CLI giả
         run: python tests/test_push_state_fake.py
-      - name: Dựng được giao diện demo
+      - name: Dựng được giao diện demo (Gradio)
         run: python -c "import runpy; m = runpy.run_path('demo/app.py', run_name='ci'); m['build']('none')"
+      - name: Web demo Cloud Run (đăng nhập, giới hạn)
+        run: python tests/test_web_cpu.py
       - name: Đóng gói Space
         run: python space/build_space.py --out build/space
+
+  # Chạy tay (workflow_dispatch): build image web, chạy container, gọi thử trang và một video ngắn — không deploy
+  web-image-check:
+    needs: test
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Đóng gói mã demo + trọng số
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/setup_reltr.py
+          python space/build_space.py --out build/web
+          cp deploy/cloudrun/web.py build/web/
+          gh release download weights-a1 -R "${{ github.repository }}" -p epoch4_weights.pth -D build/web/weights
+          echo "e6988797121af05090c178dbe85212885e5d15caaf2adc0788921a4206c9362c  build/web/weights/epoch4_weights.pth" | sha256sum -c -
+      - name: Build image
+        run: |
+          docker build -t dsp-web -f deploy/cloudrun/Dockerfile build/web
+          docker images dsp-web --format 'kích thước image: {{.Size}}'
+      - name: Chạy container và gọi thử
+        run: |
+          docker run -d --name web -p 8080:8080 --cpus 2 --memory 4g -e DSP_DEMO_PASS=mat-khau-ci-123 -e DSP_MAX_SECONDS=4 dsp-web
+          for i in $(seq 60); do curl -fs localhost:8080/healthz && break; sleep 2; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -u dsp:mat-khau-ci-123 localhost:8080/)" = 200
+          pip -q install imageio-ffmpeg
+          FF=$(python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())")
+          "$FF" -loglevel error -f lavfi -i testsrc=size=480x270:rate=24 -t 3 -pix_fmt yuv420p test.mp4
+          curl -fs -u dsp:mat-khau-ci-123 -F video=@test.mp4 -F fps=1 localhost:8080/api/run | tee run.json
+          python -c "import json; j = json.load(open('run.json')); assert j['frames'] >= 2, j; print('ok', j['frames'], 'frame', j['seconds'], 's')"
+          docker logs web | tail -5
+
+  deploy-cloudrun:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.GCP_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REGION: ${{ vars.GCP_REGION }}
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/dsp-s/demo:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Đóng gói mã demo
+        run: |
+          python tools/setup_reltr.py
+          python space/build_space.py --out build/web
+          cp deploy/cloudrun/web.py build/web/
+      - name: Trọng số từ Release weights-a1 (kiểm sha256)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download weights-a1 -R "${{ github.repository }}" -p epoch4_weights.pth -D build/web/weights
+          echo "e6988797121af05090c178dbe85212885e5d15caaf2adc0788921a4206c9362c  build/web/weights/epoch4_weights.pth" | sha256sum -c -
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SA_EMAIL }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Build và push image
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker build -t "$IMAGE" -f deploy/cloudrun/Dockerfile build/web
+          docker push "$IMAGE"
+      - name: Deploy Cloud Run (CPU, scale về 0, tối đa 1 instance)
+        run: |
+          gcloud run deploy dsp-s-demo --image "$IMAGE" --region "$REGION" \
+            --service-account "${{ vars.GCP_RUN_SA }}" \
+            --cpu 2 --memory 4Gi --min-instances 0 --max-instances 1 --concurrency 4 --timeout 900 \
+            --allow-unauthenticated \
+            --set-env-vars DSP_DEMO_USER=dsp,DSP_MAX_SECONDS=60,DSP_MAX_MB=30 \
+            --set-secrets DSP_DEMO_PASS=dsp-demo-pass:latest --quiet
+          echo "Web demo: $(gcloud run services describe dsp-s-demo --region "$REGION" --format 'value(status.url)')" >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     needs: test

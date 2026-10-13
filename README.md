@@ -15,7 +15,7 @@ RelTR được dựng lại từ upstream (commit `fca7397`) cộng bản vá `p
 | `patches/reltr_dsp.patch` | Bản vá P1–P13 cho RelTR (lớp AG, AMP, DDP, resume, hạn giờ, chấm dev) |
 | `configs/` | `A1.yaml` (mẫu) và `A1_decided_G5.yaml` (cấu hình đã chốt của A1) |
 | `demo/app.py` | Giao diện Gradio (máy nhà hoặc Space), có đăng nhập bằng mật khẩu |
-| `deploy/` | `setup_demo.py` (cài demo trên máy mới), `serve_local.ps1` / `serve_local.sh` (mở link cho máy khác qua Cloudflare Quick Tunnel) |
+| `deploy/` | `setup_demo.py` (cài demo trên máy mới), `serve_local.ps1` / `serve_local.sh` (máy nhà + Cloudflare Tunnel), `cloudrun/` (web demo trên Google Cloud Run) |
 | `space/` | Đóng gói và deploy lên Hugging Face Space |
 | `tests/` | Kiểm thử CPU |
 | `.github/workflows/ci-cd.yml` | CI (kiểm thử) và CD (deploy Space) |
@@ -63,6 +63,19 @@ powershell -ExecutionPolicy Bypass -File deploy/serve_local.ps1         # hỏi 
 
   Gửi link + user `dsp` + mật khẩu cho người cần xem. Link đổi mỗi lần chạy; máy nhà phải bật. Không có cloudflared thì
   dùng `-Share` (link `*.gradio.live` tạm thời). Demo chỉ xử lý 60 giây đầu video (`DSP_MAX_SECONDS`).
+- **Web demo trên Google Cloud Run (link cố định, miễn phí trong hạn mức tháng)**: FastAPI + trang HTML
+  (`deploy/cloudrun/web.py`, không dùng Gradio vì kết nối heartbeat của Gradio làm Cloud Run tính tiền cả khi không ai dùng),
+  đăng nhập HTTP Basic (user `dsp`, mật khẩu ở Secret Manager). CPU 2 vCPU / 4 GiB, scale về 0, tối đa 1 instance,
+  mỗi lần một video (≤ 30 MB, 60 giây đầu). Push lên `main` thì job `deploy-cloudrun` build image (kèm trọng số từ Release)
+  và deploy; link hiện ở trang tóm tắt của lần chạy GitHub Actions. Thiết lập một lần:
+
+  1. Tạo project ở https://console.cloud.google.com và liên kết tài khoản thanh toán (bắt buộc kể cả khi dùng miễn phí);
+     nên đặt cảnh báo ngân sách (Billing → Budgets).
+  2. Cài gcloud (`winget install Google.CloudSDK`), mở terminal mới, `gcloud auth login`.
+  3. `powershell -ExecutionPolicy Bypass -File deploy/cloudrun/setup_gcp.ps1 -ProjectId <id-project>`
+     (hỏi mật khẩu web, tự ghi biến `GCP_*` vào GitHub).
+  4. `gh workflow run ci-cd.yml -R remembered-fragrance/dsp-s-reltr-ag` hoặc push lên `main`.
+
 - **Hugging Face Space (tùy chọn, trả phí)**: Space Gradio cần gói PRO (cá nhân) hoặc Team (organization).
   Khi có, đặt biến `HF_SPACE_ID`, `HF_MODEL_REPO` và secret `HF_TOKEN` trên GitHub thì job `deploy` tự đồng bộ
   (`space/build_space.py`, `space/deploy_space.py`); chưa đặt `HF_SPACE_ID` thì job được bỏ qua.
