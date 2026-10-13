@@ -60,10 +60,7 @@ def build(ckpt):
         return str(mp4), rows, str(gj), (out / "summary.md").read_text(encoding="utf-8")
 
     with gr.Blocks(title="DSP_S — RelTR trên Action Genome") as app:
-        gr.Markdown("## Video → đồ thị cảnh theo từng frame (RelTR baseline A1)\n"
-                    f"Demo minh họa; không dùng số liệu ở đây trong báo cáo. Chạy trên **{'GPU' if gpu else 'CPU'}**; "
-                    f"chỉ xử lý {MAX_SECONDS:.0f} giây đầu của video"
-                    + ("" if gpu else " (CPU: khoảng 1–2 giây cho mỗi frame)") + ".")
+        gr.Markdown("## Video → đồ thị cảnh theo từng frame (RelTR baseline A1)")
         with gr.Row():
             with gr.Column():
                 vin = gr.Video(label="Video đầu vào")
