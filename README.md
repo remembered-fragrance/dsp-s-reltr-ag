@@ -7,7 +7,6 @@ test AG-full: R@20 With Constraint = 22,6).
 
 Cần:
 
-- Quyền đọc repo: repo là private, chủ repo phải mời tài khoản GitHub của bạn (Settings → Collaborators) và bạn chấp nhận lời mời.
 - Python 3.10–3.13, git, [GitHub CLI](https://cli.github.com) đã `gh auth login`.
 - Khoảng 8 GB trống (`.venv` có PyTorch bản CUDA ~5 GB, bộ nhớ đệm pip lúc cài, trọng số A1 245 MB; bản CPU nhỏ hơn nhiều).
   Không cần dữ liệu Charades/Action Genome.
