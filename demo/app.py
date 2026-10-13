@@ -84,8 +84,14 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", default=os.environ.get("DSP_CKPT", str(ROOT / "runs" / "A1" / "ckpt" / "epoch4_weights.pth")))
     ap.add_argument("--port", type=int, default=int(os.environ.get("GRADIO_SERVER_PORT", 7860)))
+    ap.add_argument("--share", action="store_true", help="link *.gradio.live tạm thời (dự phòng khi không có cloudflared)")
     a = ap.parse_args()
     ckpt = resolve_ckpt(a.ckpt)
-    # máy nhà: chỉ 127.0.0.1; Space tự đặt GRADIO_SERVER_NAME (0.0.0.0) và tự kiểm soát quyền truy cập (Space private)
+    # Đăng nhập: bắt buộc khi demo ra Internet (tunnel hoặc --share); đặt DSP_DEMO_USER / DSP_DEMO_PASS
+    user, pw = os.environ.get("DSP_DEMO_USER", "dsp"), os.environ.get("DSP_DEMO_PASS")
+    if (a.share or os.environ.get("DSP_PUBLIC") == "1") and not pw:
+        sys.exit("demo sắp ra Internet: đặt mật khẩu bằng biến môi trường DSP_DEMO_PASS")
+    # máy nhà: chỉ 127.0.0.1 (tunnel nối vào đây); Space tự đặt GRADIO_SERVER_NAME (0.0.0.0)
     build(ckpt).queue(default_concurrency_limit=1, max_size=8).launch(
-        server_name=os.environ.get("GRADIO_SERVER_NAME", "127.0.0.1"), server_port=a.port, share=False)
+        server_name=os.environ.get("GRADIO_SERVER_NAME", "127.0.0.1"), server_port=a.port, share=a.share,
+        auth=(user, pw) if pw else None, auth_message="DSP_S demo — đăng nhập để dùng")
