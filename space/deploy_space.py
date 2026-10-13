@@ -12,10 +12,20 @@ from huggingface_hub import HfApi
 
 def main():
     folder = sys.argv[1] if len(sys.argv) > 1 else "build/space"
-    token, space = os.environ.get("HF_TOKEN"), os.environ.get("HF_SPACE_ID")
+    token = (os.environ.get("HF_TOKEN") or "").strip().strip('"').strip("'")  # dán secret hay kèm khoảng trắng/ngoặc
+    space = (os.environ.get("HF_SPACE_ID") or "").strip()
     if not token or not space:
         sys.exit("cần HF_TOKEN và HF_SPACE_ID")
+    if not token.startswith("hf_"):
+        sys.exit("secret HF_TOKEN không giống token Hugging Face (phải bắt đầu bằng 'hf_'): đặt lại secret")
     api = HfApi(token=token)
+    try:
+        who = api.whoami()
+    except Exception as e:  # 401: token sai/hết hạn/đã thu hồi
+        sys.exit(f"Hugging Face không nhận token trong secret HF_TOKEN ({type(e).__name__}): tạo token mới rồi đặt lại secret")
+    org = space.split("/")[0]
+    if org != who.get("name") and org not in {o.get("name") for o in who.get("orgs", [])}:
+        sys.exit(f"token của {who.get('name')} không có quyền với namespace {org}")
     # luôn private; exist_ok để lần sau chỉ cập nhật
     api.create_repo(space, repo_type="space", space_sdk="gradio", private=True, exist_ok=True)
     if not api.space_info(space).private:
