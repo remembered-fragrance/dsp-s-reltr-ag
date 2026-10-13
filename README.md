@@ -15,12 +15,32 @@ RelTR được dựng lại từ upstream (commit `fca7397`) cộng bản vá `p
 | `patches/reltr_dsp.patch` | Bản vá P1–P13 cho RelTR (lớp AG, AMP, DDP, resume, hạn giờ, chấm dev) |
 | `configs/` | `A1.yaml` (mẫu) và `A1_decided_G5.yaml` (cấu hình đã chốt của A1) |
 | `demo/app.py` | Giao diện Gradio (máy nhà hoặc Space), có đăng nhập bằng mật khẩu |
-| `deploy/serve_local.ps1` | Chạy demo trên máy nhà và mở link cho máy khác (Cloudflare Quick Tunnel) |
+| `deploy/` | `setup_demo.py` (cài demo trên máy mới), `serve_local.ps1` / `serve_local.sh` (mở link cho máy khác qua Cloudflare Quick Tunnel) |
 | `space/` | Đóng gói và deploy lên Hugging Face Space |
 | `tests/` | Kiểm thử CPU |
 | `.github/workflows/ci-cd.yml` | CI (kiểm thử) và CD (deploy Space) |
 
-## Cài đặt
+## Chạy demo trên máy mới
+
+Cần: Python 3.10–3.13, git, [GitHub CLI](https://cli.github.com) đã `gh auth login` (repo private).
+Không cần dữ liệu: trọng số A1 (245 MB) nằm ở Release [`weights-a1`](https://github.com/remembered-fragrance/dsp-s-reltr-ag/releases/tag/weights-a1).
+
+```bash
+git clone https://github.com/remembered-fragrance/dsp-s-reltr-ag.git
+cd dsp-s-reltr-ag
+python deploy/setup_demo.py          # .venv + torch (GPU CUDA 12.8 nếu có nvidia-smi, không thì CPU) + RelTR + trọng số (kiểm sha256)
+```
+
+Sau đó:
+
+| Mục đích | Windows | Linux / macOS |
+|---|---|---|
+| Chỉ dùng trên máy đó | `.venv\Scripts\python.exe demo/app.py` | `.venv/bin/python demo/app.py` |
+| Mở link cho máy khác (có mật khẩu) | `powershell -ExecutionPolicy Bypass -File deploy/serve_local.ps1` | `bash deploy/serve_local.sh` |
+
+Demo mở ở http://127.0.0.1:7860. GPU: vài giây cho mỗi video; CPU: khoảng 1–2 giây cho mỗi frame.
+
+## Cài đặt cho pipeline đầy đủ
 
 ```bash
 python tools/setup_reltr.py          # clone RelTR fca7397 + áp bản vá -> third_party/RelTR
