@@ -9,3 +9,4 @@ pyyaml
 pycocotools
 imageio-ffmpeg
 huggingface_hub
+six          # RelTR: lib/openimages_evaluation (from six.moves import cPickle)
