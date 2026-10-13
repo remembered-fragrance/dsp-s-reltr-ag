@@ -1,0 +1,14 @@
+# Cấu hình baseline A1 (require mục 8). Các giá trị null được chốt ở G5 bằng
+#   python tools/g5_speed.py decide ...  và  python tools/g5_speed.py sha ...
+# KHÔNG sửa tay sau khi đã commit notebook 02 (MR-6).
+k: null
+lr_backbone: null
+num_workers: 2
+batch_size: 2
+epochs: 4
+lr_drop: 3
+tau_open: null
+tau_frozen: null
+gpu_util: null
+decided_at: null
+train_json_sha256: null

@@ -1,0 +1,11 @@
+k: 8
+lr_backbone: 1.0e-05
+num_workers: 3
+batch_size: 2
+epochs: 4
+lr_drop: 3
+tau_open: 0.11719
+tau_frozen: null
+gpu_util: 61.1
+decided_at: '2026-10-12T08:00:42'
+train_json_sha256: ce78dfafa6cfa3f5c576dd3ffb899f8cd032bc64557678c9861e3e9f51cac377

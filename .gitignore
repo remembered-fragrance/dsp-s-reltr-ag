@@ -1,0 +1,22 @@
+# Repo chỉ chứa mã cần cho pipeline (danh sách cho phép). Mọi thứ khác ở máy nhà:
+# dữ liệu, trọng số, kết quả chạy, tài liệu (require.md, skill.md, docx/pdf), mã tham chiếu, RelTR (dựng bằng tools/setup_reltr.py).
+/*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/requirements.txt
+!/.github/
+!/configs/
+!/demo/
+!/patches/
+!/space/
+!/tests/
+!/tools/
+
+# trong các thư mục được phép
+__pycache__/
+*.pyc
+/tools/report_*.py
+/tools/report_pdf.ps1
+/tests/sim_notebook02.py
+/build/

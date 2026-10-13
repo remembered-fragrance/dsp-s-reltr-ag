@@ -1,0 +1,68 @@
+name: ci-cd
+
+# CI: mọi push và pull request chạy kiểm thử CPU (không cần dữ liệu AG hay GPU).
+# CD: push lên main mà CI qua -> đóng gói demo và đồng bộ sang Hugging Face Space PRIVATE.
+#   Cần: secret HF_TOKEN (quyền ghi Space), biến HF_SPACE_ID (vd org/dsp-s-demo), HF_MODEL_REPO (vd org/dsp-s-reltr-a1).
+#   Chưa đặt HF_SPACE_ID thì bước deploy được bỏ qua.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Cài thư viện (torch CPU)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt gradio==6.30.0
+      - name: Dựng RelTR (upstream fca7397 + patches/reltr_dsp.patch)
+        run: python tools/setup_reltr.py
+      - name: Kiểm tra cú pháp
+        run: python -m compileall -q tools tests demo space
+      - name: Lưu và resume checkpoint (P11)
+        run: python tests/test_resume_cpu.py
+      - name: Model, đóng gói dự đoán, bộ chấm điểm (FR-5, FR-6, P12)
+        run: python tests/test_model_cpu.py
+      - name: Đẩy trạng thái bằng Kaggle CLI giả
+        run: python tests/test_push_state_fake.py
+      - name: Dựng được giao diện demo
+        run: python -c "import runpy; m = runpy.run_path('demo/app.py', run_name='ci'); m['build']('none')"
+      - name: Đóng gói Space
+        run: python space/build_space.py --out build/space
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.HF_SPACE_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install huggingface_hub
+      - run: python tools/setup_reltr.py
+      - run: python space/build_space.py --out build/space
+      - name: Đồng bộ sang Hugging Face Space (private)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+          DSP_MODEL_REPO: ${{ vars.HF_MODEL_REPO }}
+        run: python space/deploy_space.py build/space
