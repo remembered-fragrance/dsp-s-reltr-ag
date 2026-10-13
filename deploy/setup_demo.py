@@ -101,7 +101,7 @@ def main():
     run([py, ROOT / "tools" / "setup_reltr.py"])
     fetch_weights()
     run([py, "-c", "import torch; print('torch', torch.__version__, '| GPU:', torch.cuda.is_available())"])
-    act = r".venv\Scripts\python.exe" if os.name == "nt" else ".venv/bin/python"
+    act = os.path.relpath(py, ROOT) if py.resolve().is_relative_to(ROOT) else str(py)  # --venv có thể ở ngoài repo
     print("\nXong. Chạy demo:")
     print(f"  {act} demo/app.py                       # chỉ máy này: http://127.0.0.1:7860")
     if os.name == "nt":
