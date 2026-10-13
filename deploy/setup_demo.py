@@ -46,7 +46,7 @@ def base_requirements():
     """requirements.txt trừ torch/torchvision và dòng index (đã cài riêng theo GPU/CPU)."""
     out = []
     for line in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines():
-        s = line.strip()
+        s = line.split(" #", 1)[0].strip()  # bỏ ghi chú cuối dòng
         if not s or s.startswith("#") or s.startswith("-") or s.split("=")[0].strip() in ("torch", "torchvision"):
             continue
         out.append(s)
